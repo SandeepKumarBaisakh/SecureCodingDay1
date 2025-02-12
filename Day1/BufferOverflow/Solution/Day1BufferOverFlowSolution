@@ -1,0 +1,28 @@
+#include <cstdio>
+#include <cstring>
+#include <iostream>
+
+
+
+int main()
+{
+
+  const char *PASSWORD_FILE = "rictro";
+const int MAX_PASSWORD_LENGTH = 7;
+  
+
+    char input[MAX_PASSWORD_LENGTH + 1] = {0};
+    char password[MAX_PASSWORD_LENGTH + 1] = {0};
+    
+    std::sscanf(PASSWORD_FILE, "%7s", password);
+
+    std::cout << "Enter password: ";
+    std::cin.getline(input, MAX_PASSWORD_LENGTH + 1);
+
+    if (std::strncmp(password, input, MAX_PASSWORD_LENGTH) == 0)
+        std::cout << "Access granted\n";
+    else
+        std::cout << "Access denied\n";
+
+  return 0;
+}
