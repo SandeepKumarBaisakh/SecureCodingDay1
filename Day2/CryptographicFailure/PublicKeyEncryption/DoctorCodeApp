@@ -1,0 +1,36 @@
+using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
+class DoctorDecrypt
+{
+    private const string PrivateKeyFile = "privateKey.xml";
+    private const string PatientFile = "patients.txt"; // File to store encrypted patient data
+
+    static void Main(string[] args)
+    {
+        if (!File.Exists(PatientFile))
+        {
+            Console.WriteLine("No patient records found.");
+            return;
+        }
+
+        Console.WriteLine("Decrypted Patient Data:");
+
+        var encryptedRecords = File.ReadAllLines(PatientFile);
+        foreach (var encryptedData in encryptedRecords)
+        {
+            var decryptedData = DecryptDataWithRSA(encryptedData, PrivateKeyFile);
+            Console.WriteLine(decryptedData);
+        }
+    }
+
+    private static string DecryptDataWithRSA(string encryptedData, string privateKeyFile)
+    {
+        var rsa = new RSACryptoServiceProvider();
+        rsa.FromXmlString(File.ReadAllText(privateKeyFile));
+        var decryptedData = rsa.Decrypt(Convert.FromBase64String(encryptedData), true);
+        return Encoding.UTF8.GetString(decryptedData);
+    }
+}
