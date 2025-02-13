@@ -1,0 +1,222 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
+class Program
+{
+    private const string AdminFile = "admins.txt";
+    private const string PatientFile = "patients.txt"; // File to store patient data for prototyping only
+    private const string PublicKeyFile = "publicKey.xml"; // Store the doctor's public key for prototyping only
+    private const string PrivateKeyFile = "privateKey.xml"; // Store the doctor's private key for prototyping only
+    private static Dictionary<string, string> admins = new Dictionary<string, string>();
+    private static int failedLoginAttempts = 0;
+    private static string sessionKey;
+
+    static void Main(string[] args)
+    {
+        LoadAdmins();
+        GenerateRSAKeys(); // Generate RSA key pair added in this cs file for faster output file manually to be copied to doctorapp solution to work
+        while (true)
+        {
+            Console.WriteLine("1. Register\n2. Login\n3. Exit");
+            var choice = Console.ReadLine();
+            switch (choice)
+            {
+                case "1":
+                    Register();
+                    break;
+                case "2":
+                    if (Login())
+                    {
+                        Console.WriteLine("Access granted to patient management functions.");
+                        PatientManagement();
+                    }
+                    break;
+                case "3":
+                    return;
+            }
+        }
+    }
+
+    private static void LoadAdmins()
+    {
+        if (File.Exists(AdminFile))
+        {
+            var lines = File.ReadAllLines(AdminFile);
+            foreach (var line in lines)
+            {
+                var parts = line.Split(',');
+                if (parts.Length == 2)
+                {
+                    admins[parts[0]] = parts[1];
+                }
+            }
+        }
+    }
+
+    private static void SaveAdmins()
+    {
+        var lines = new List<string>();
+        foreach (var admin in admins)
+        {
+            lines.Add($"{admin.Key},{admin.Value}");
+        }
+        File.WriteAllLines(AdminFile, lines);
+    }
+
+    private static void Register()
+    {
+        Console.Write("Enter username: ");
+        var username = Console.ReadLine();
+        if (admins.ContainsKey(username))
+        {
+            Console.WriteLine("Username already exists.");
+            return;
+        }
+
+        Console.Write("Enter passcode: ");
+        var passcode = Console.ReadLine();
+        var hashedPasscode = BCrypt.Net.BCrypt.HashPassword(passcode);
+        admins[username] = hashedPasscode;
+        SaveAdmins();
+        Console.WriteLine("Admin registered successfully.");
+    }
+
+    private static bool Login()
+    {
+        if (failedLoginAttempts >= 3)
+        {
+            Console.WriteLine("Too many failed login attempts. User locked out.");
+            return false;
+        }
+
+        Console.Write("Enter username: ");
+        var username = Console.ReadLine();
+        if (!admins.ContainsKey(username))
+        {
+            Console.WriteLine("Invalid username or passcode.");
+            failedLoginAttempts++;
+            return false;
+        }
+
+        Console.Write("Enter passcode: ");
+        var passcode = Console.ReadLine();
+        if (!BCrypt.Net.BCrypt.Verify(passcode, admins[username]))
+        {
+            Console.WriteLine("Invalid username or passcode.");
+            failedLoginAttempts++;
+            return false;
+        }
+
+        failedLoginAttempts = 0;
+        sessionKey = GenerateSessionKey();
+        return true;
+    }
+
+    private static void PatientManagement()
+    {
+        while (true)
+        {
+            Console.WriteLine("1. Add Patient\n2. View Patients\n3. Logout");
+            var choice = Console.ReadLine();
+            switch (choice)
+            {
+                case "1":
+                    AddPatient();
+                    break;
+                case "2":
+                    ViewPatients();
+                    break;
+                case "3":
+                    sessionKey = null;
+                    return;
+            }
+        }
+    }
+
+    private static void AddPatient()
+    {
+        Console.Write("Enter Name: ");
+        var name = Console.ReadLine();
+        Console.Write("Enter Age: ");
+        var age = Console.ReadLine();
+        Console.Write("Enter Email: ");
+        var email = Console.ReadLine();
+        Console.Write("Enter Social Security Number (SSN): ");
+        var ssn = Console.ReadLine();
+        Console.Write("Enter History of Illness: ");
+        var history = Console.ReadLine();
+
+        var patientData = $"{name},{age},{email},{ssn},{history}";
+        var encryptedData = EncryptDataWithRSA(patientData, PublicKeyFile);
+
+        // Store encrypted data in a file
+        File.AppendAllText(PatientFile, encryptedData + Environment.NewLine);
+        Console.WriteLine("Patient data added and encrypted successfully.");
+    }
+
+    private static void ViewPatients()
+    {
+        if (!File.Exists(PatientFile))
+        {
+            Console.WriteLine("No patient records found.");
+            return;
+        }
+
+        Console.WriteLine("Patient Records:");
+        var encryptedRecords = File.ReadAllLines(PatientFile);
+        foreach (var record in encryptedRecords)
+        {
+            var decryptedData = DecryptData(record, sessionKey);
+            Console.WriteLine(decryptedData);
+        }
+    }
+
+    private static string GenerateSessionKey()
+    {
+        using (var aes = Aes.Create())
+        {
+            aes.GenerateKey();
+            return Convert.ToBase64String(aes.Key);
+        }
+    }
+
+    private static void GenerateRSAKeys()
+    {
+        using (var rsa = new RSACryptoServiceProvider(2048))
+        {
+            File.WriteAllText(PublicKeyFile, rsa.ToXmlString(false));
+            File.WriteAllText(PrivateKeyFile, rsa.ToXmlString(true));
+        }
+    }
+
+    private static string EncryptDataWithRSA(string data, string publicKeyFile)
+    {
+        var rsa = new RSACryptoServiceProvider();
+        rsa.FromXmlString(File.ReadAllText(publicKeyFile));
+        var encryptedData = rsa.Encrypt(Encoding.UTF8.GetBytes(data), true);
+        return Convert.ToBase64String(encryptedData);
+    }
+
+    private static string DecryptData(string data, string key)
+    {
+        var fullCipher = Convert.FromBase64String(data);
+        using (var aes = Aes.Create())
+        {
+            aes.Key = Convert.FromBase64String(key);
+            var iv = new byte[aes.BlockSize / 8];
+            var cipherText = new byte[fullCipher.Length - iv.Length];
+            Array.Copy(fullCipher, iv, iv.Length);
+            Array.Copy(fullCipher, iv.Length, cipherText, 0, cipherText.Length);
+            using (var decryptor = aes.CreateDecryptor(aes.Key, iv))
+            using (var ms = new MemoryStream(cipherText))
+            using (var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read))
+            using (var sr = new StreamReader(cs))
+            {
+                return sr.ReadToEnd();
+            }
+        }
+    }
+}
