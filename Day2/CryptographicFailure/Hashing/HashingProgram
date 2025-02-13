@@ -1,0 +1,110 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using BCrypt.Net;
+
+class Program
+{
+    private const string AdminFile = "admins.txt";
+    private static Dictionary<string, string> admins = new Dictionary<string, string>();
+    private static int failedLoginAttempts = 0;
+
+    static void Main(string[] args)
+    {
+        LoadAdmins();
+        while (true)
+        {
+            Console.WriteLine("1. Register\n2. Login\n3. Exit");
+            var choice = Console.ReadLine();
+            switch (choice)
+            {
+                case "1":
+                    Register();
+                    break;
+                case "2":
+                    if (Login())
+                    {
+                        Console.WriteLine("Access granted to patient management functions.");
+                        // Add patient management functions here
+                    }
+                    break;
+                case "3":
+                    return;
+            }
+        }
+    }
+
+    private static void LoadAdmins()
+    {
+        if (File.Exists(AdminFile))
+        {
+            var lines = File.ReadAllLines(AdminFile);
+            foreach (var line in lines)
+            {
+                var parts = line.Split(',');
+                if (parts.Length == 2)
+                {
+                    admins[parts[0]] = parts[1];
+                }
+            }
+        }
+    }
+
+    private static void SaveAdmins()
+    {
+        var lines = new List<string>();
+        foreach (var admin in admins)
+        {
+            lines.Add($"{admin.Key},{admin.Value}");
+        }
+        File.WriteAllLines(AdminFile, lines);
+    }
+
+    private static void Register()
+    {
+        Console.Write("Enter username: ");
+        var username = Console.ReadLine();
+        if (admins.ContainsKey(username))
+        {
+            Console.WriteLine("Username already exists.");
+            return;
+        }
+
+        Console.Write("Enter passcode: ");
+        var passcode = Console.ReadLine();
+        var hashedPasscode = BCrypt.Net.BCrypt.HashPassword(passcode);
+        admins[username] = hashedPasscode;
+        SaveAdmins();
+        Console.WriteLine("Admin registered successfully.");
+    }
+
+    private static bool Login()
+    {
+        if (failedLoginAttempts >= 3)
+        {
+            Console.WriteLine("Too many failed login attempts. User locked out.");
+            return false;
+        }
+
+        Console.Write("Enter username: ");
+        var username = Console.ReadLine();
+        if (!admins.ContainsKey(username))
+        {
+            Console.WriteLine("Invalid username or passcode.");
+            failedLoginAttempts++;
+            return false;
+        }
+
+        Console.Write("Enter passcode: ");
+        var passcode = Console.ReadLine();
+        if (!BCrypt.Net.BCrypt.Verify(passcode, admins[username]))
+        {
+            Console.WriteLine("Invalid username or passcode.");
+            failedLoginAttempts++;
+            return false;
+        }
+
+        failedLoginAttempts = 0;
+        return true;
+    }
+}
