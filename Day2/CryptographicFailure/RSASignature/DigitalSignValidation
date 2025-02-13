@@ -1,0 +1,39 @@
+using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
+class HospitalVerification
+{
+    private const string PublicKeyFile = "publicKey.xml";
+    private const string PatientFile = "patients.txt"; // File to store encrypted patient data
+
+    static void Main(string[] args)
+    {
+        Console.WriteLine("Enter the signed medical report:");
+        var signedReport = Console.ReadLine();
+        var report = File.ReadAllText(PatientFile);
+
+        var isValid = VerifySignature(report, signedReport, PublicKeyFile);
+        if (isValid)
+        {
+            Console.WriteLine("The medical report is authentic.");
+        }
+        else
+        {
+            Console.WriteLine("The medical report is not authentic.");
+        }
+    }
+
+    private static bool VerifySignature(string data, string signedData, string publicKeyFile)
+    {
+        using (var rsa = new RSACryptoServiceProvider())
+        {
+            rsa.FromXmlString(File.ReadAllText(publicKeyFile));
+            var dataBytes = Encoding.UTF8.GetBytes(data);
+            var hashBytes = SHA256.Create().ComputeHash(dataBytes);
+            var signedBytes = Convert.FromBase64String(signedData);
+            return rsa.VerifyHash(hashBytes, CryptoConfig.MapNameToOID("SHA256"), signedBytes);
+        }
+    }
+}
